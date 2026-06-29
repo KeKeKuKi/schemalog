@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+.schemalog.json
+.schemalog-cache.json
+SCHEMA.md
+DATA_DICTIONARY.md

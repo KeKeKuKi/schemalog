@@ -1,0 +1,62 @@
+name: Schemalog — Database Migration Changelog
+description: Generate a human-readable changelog for SQL migrations in this PR
+branding:
+  icon: "database"
+  color: "purple"
+
+inputs:
+  api_key:
+    description: "DeepSeek or OpenAI API key"
+    required: true
+  migrations_dir:
+    description: "Directory containing .sql migration files"
+    default: "migrations"
+  provider:
+    description: "AI provider: deepseek | openai"
+    default: "deepseek"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Install schemalog
+      run: npm install schemalog
+      shell: bash
+
+    - name: Initialize schemalog
+      run: npx schemalog init --dir ${{ inputs.migrations_dir }} --provider ${{ inputs.provider }}
+      shell: bash
+
+    - name: Generate changelog
+      id: generate
+      run: |
+        npx schemalog generate --provider ${{ inputs.provider }} > changelog-output.txt 2>&1 || true
+        cat changelog-output.txt
+      shell: bash
+      env:
+        SCHEMALOG_API_KEY: ${{ inputs.api_key }}
+
+    - name: Post PR comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require("fs");
+          const changelog = fs.readFileSync("SCHEMA.md", "utf-8");
+          const output = fs.readFileSync("changelog-output.txt", "utf-8");
+
+          let body = "## 📊 Database Migration Changelog\n\n";
+          body += changelog;
+          body += "\n\n<details><summary>CLI output</summary>\n\n```\n";
+          body += output;
+          body += "\n```\n</details>";
+
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body,
+          });

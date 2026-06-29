@@ -1,0 +1,45 @@
+{
+  "name": "schemalog",
+  "version": "1.0.0",
+  "description": "Your database docs stop lying. AI-powered changelog and data dictionary from SQL migrations.",
+  "bin": {
+    "schemalog": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "tsc && cp -r src/output/templates dist/output/",
+    "dev": "ts-node src/cli.ts",
+    "start": "node dist/cli.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "database",
+    "migration",
+    "changelog",
+    "sql",
+    "documentation",
+    "data-dictionary",
+    "schema",
+    "ai",
+    "cli",
+    "devtools"
+  ],
+  "author": "Schemalog",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/schemalog/schemalog"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "handlebars": "^4.7.9",
+    "openai": "^6.45.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "typescript": "^5.0.0"
+  }
+}
