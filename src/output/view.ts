@@ -126,7 +126,7 @@ export function generateSchemaView(
   }
   .graph-canvas-wrap {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    overflow: hidden;
+    overflow: hidden; min-height: 180px; display: flex; align-items: center; justify-content: center;
   }
   svg#rel-graph { display: block; width: 100%; }
   svg#rel-graph .node-rect { fill: var(--surface2); stroke: var(--border); stroke-width: 1; rx: 4; }
@@ -308,7 +308,7 @@ export function generateSchemaView(
 <script>
 const DATA = ${data};
 
-const state = { activeTable: null, graphNodes: [], graphEdges: [] };
+const state = { activeTable: DATA.tables[0] || null, graphNodes: [], graphEdges: [] };
 
 // ====== RENDER ======
 function render() {
@@ -353,10 +353,11 @@ function renderGraph() {
   // Simple grid layout
   const cols = Math.min(6, Math.ceil(Math.sqrt(DATA.tables.length * 2)));
   const rows = Math.ceil(DATA.tables.length / cols);
-  const cellW = 160;
-  const cellH = 48;
+  const cellW = 180;
+  const cellH = 54;
   const padX = 40;
   const padY = 30;
+  const minGraphH = 200;
   const gapX = 24;
   const gapY = 20;
   const totalW = cols * cellW + (cols - 1) * gapX + padX * 2;
@@ -420,7 +421,7 @@ function renderGraph() {
 
   const renderRels = edges.length > 0;
   wrap.innerHTML = renderRels
-    ? \`<svg id="rel-graph" viewBox="0 0 \${totalW} \${totalH}" style="min-height:\${totalH}px">
+    ? \`<svg id="rel-graph" viewBox="0 0 \${totalW} \${totalH}" style="min-height:\${Math.max(totalH, minGraphH)}px;width:100%">
       <defs><marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
         <path d="M0,0 L6,3 L0,6 Z" class="edge-marker" />
       </marker></defs>
@@ -461,12 +462,14 @@ function renderDetail() {
   const ddl = t.sql || \`CREATE TABLE \${t.name} (\n\${t.columns.map(c =>
     \`  \${c.name} \${c.type}\${c.nullable ? '' : ' NOT NULL'}\${c.defaultValue !== null && c.defaultValue !== undefined ? ' DEFAULT ' + c.defaultValue : ''}\`
   ).join(',\\n')}\n);\`;
+  window.__currentTableName = t.name;
+  window.__currentDDL = ddl;
 
   main.innerHTML = \`
     <div class="detail-header">
       <h1>
         \${escHtml(t.name)}
-        <button class="copy-btn" onclick="copyText('\${escAttr(t.name)}')">Copy name</button>
+        <button class="copy-btn" onclick="copyTableName()">Copy name</button>
       </h1>
       <div class="header-meta">
         <span>\${t.columns.length} columns</span>
@@ -557,7 +560,7 @@ function renderDetail() {
 
     <div class="section-title">DDL</div>
     <div class="sql-block">
-      <button class="copy-sql" onclick="copyText(\`\${escAttr(ddl)}\`)">Copy DDL</button>
+      <button class="copy-sql" onclick="copyDDL()">Copy DDL</button>
       \${escHtml(ddl)}
     </div>
   \`;
@@ -576,7 +579,6 @@ async function copyText(text) {
     await navigator.clipboard.writeText(text);
     toast("Copied!");
   } catch {
-    // Fallback
     const ta = document.createElement("textarea");
     ta.value = text;
     document.body.appendChild(ta);
@@ -585,6 +587,12 @@ async function copyText(text) {
     document.body.removeChild(ta);
     toast("Copied!");
   }
+}
+function copyTableName() {
+  if (window.__currentTableName) copyText(window.__currentTableName);
+}
+function copyDDL() {
+  if (window.__currentDDL) copyText(window.__currentDDL);
 }
 
 function toast(msg) {
@@ -600,7 +608,7 @@ function escHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 function escAttr(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/\\\\/g, "\\\\\\\\");
+  return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/\`/g, "&#96;");
 }
 
 // ====== INIT ======
@@ -615,5 +623,5 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 function escapeAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/\\/g, "\\\\");
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/\`/g, "&#96;");
 }
