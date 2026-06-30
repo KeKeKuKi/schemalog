@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Database Schema — Schema View</title>
+<style>
+  :root {
+    --bg: #080b12;
+    --surface: #111620;
+    --surface2: #1a2030;
+    --border: #1e293b;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --text3: #484f58;
+    --accent: #58a6ff;
+    --accent2: #79c0ff;
+    --accent-bg: rgba(88,166,255,0.1);
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --purple: #a371f7;
+    --type-bg: #1c2536;
+    --type-text: #8b949e;
+    --radius: 8px;
+    --radius-sm: 4px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font); background: var(--bg); color: var(--text);
+    height: 100vh; display: flex; overflow: hidden; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ====== SIDEBAR ====== */
+  aside {
+    width: 300px; min-width: 300px; background: var(--surface);
+    border-right: 1px solid var(--border); display: flex; flex-direction: column;
+    height: 100vh; z-index: 10;
+  }
+  .sb-header {
+    padding: 20px 20px 12px; border-bottom: 1px solid var(--border);
+  }
+  .sb-header h2 { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+  .sb-header .sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .search-wrap { padding: 8px 16px 12px; }
+  .search-wrap input {
+    width: 100%; padding: 8px 12px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); font-size: 13px; outline: none;
+    transition: border-color .2s;
+  }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .search-wrap input::placeholder { color: var(--text3); }
+
+  .table-list { flex: 1; overflow-y: auto; padding: 4px 12px; }
+  .table-item {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border-radius: var(--radius-sm); cursor: pointer; font-size: 13px;
+    font-weight: 500; color: var(--text2); transition: all .12s;
+    margin-bottom: 1px; position: relative;
+  }
+  .table-item:hover { background: var(--surface2); color: var(--text); }
+  .table-item.active { background: var(--accent-bg); color: var(--accent2); }
+  .table-item .icon { font-size: 15px; width: 18px; text-align: center; flex-shrink: 0; opacity: .7; }
+  .table-item.active .icon { opacity: 1; }
+  .table-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .table-item .badge {
+    font-size: 10px; padding: 2px 6px; border-radius: 10px; font-weight: 600;
+    background: var(--surface2); color: var(--text3);
+    flex-shrink: 0;
+  }
+  .table-item.active .badge { background: rgba(88,166,255,0.2); color: var(--accent2); }
+  .table-item .rel-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    flex-shrink: 0; opacity: 0; transition: opacity .2s;
+  }
+  .table-item.has-rels .rel-dot { opacity: .6; }
+  .table-item.active.has-rels .rel-dot { opacity: 1; }
+  .sb-footer {
+    padding: 10px 20px; border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--text3);
+    display: flex; justify-content: space-between;
+  }
+
+  /* ====== MAIN ====== */
+  main { flex: 1; overflow-y: auto; height: 100vh; display: flex; flex-direction: column; }
+  .main-inner { padding: 28px 36px; flex: 1; }
+
+  /* Graph */
+  .graph-section { padding: 20px 36px 16px; border-bottom: 1px solid var(--border); }
+  .graph-section .section-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--text3); font-weight: 600; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .graph-canvas-wrap {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden;
+  }
+  svg#rel-graph { display: block; width: 100%; }
+  svg#rel-graph .node-rect { fill: var(--surface2); stroke: var(--border); stroke-width: 1; rx: 4; }
+  svg#rel-graph .node-rect.active { stroke: var(--accent); stroke-width: 1.5; }
+  svg#rel-graph .node-rect.highlight { fill: var(--accent-bg); }
+  svg#rel-graph .node-text { fill: var(--text2); font-size: 11px; font-family: var(--mono); pointer-events: none; }
+  svg#rel-graph .node-text.active { fill: var(--accent2); }
+  svg#rel-graph .edge { stroke: var(--border); stroke-width: 1; fill: none; }
+  svg#rel-graph .edge.highlight { stroke: var(--accent); stroke-width: 1.5; opacity: .7; }
+  svg#rel-graph .edge-marker { fill: var(--border); }
+
+  /* Empty state */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; color: var(--text3); text-align: center; padding: 40px;
+  }
+  .empty-state .icon-lg { font-size: 56px; margin-bottom: 20px; opacity: .5; }
+  .empty-state h3 { font-size: 18px; color: var(--text2); margin-bottom: 8px; font-weight: 600; }
+  .empty-state p { font-size: 13px; max-width: 320px; }
+
+  /* Table detail header */
+  .detail-header { margin-bottom: 20px; }
+  .detail-header h1 {
+    font-size: 22px; font-weight: 700; letter-spacing: -.01em;
+    font-family: var(--mono); display: flex; align-items: center; gap: 10px;
+  }
+  .detail-header h1 .copy-btn {
+    font-size: 13px; padding: 3px 8px; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text2); border-radius: var(--radius-sm); cursor: pointer;
+    font-family: var(--font); font-weight: 500; transition: all .15s;
+  }
+  .detail-header h1 .copy-btn:hover { border-color: var(--accent); color: var(--accent2); }
+  .header-meta { font-size: 13px; color: var(--text2); margin-top: 4px; display: flex; gap: 16px; flex-wrap: wrap; }
+
+  /* Stat cards */
+  .stat-row { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+  .stat {
+    padding: 12px 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); min-width: 80px;
+  }
+  .stat .num { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+  .stat .label { font-size: 11px; color: var(--text3); margin-top: 2px; font-weight: 500; }
+  .stat.accent .num { color: var(--accent2); }
+
+  /* Section */
+  .section-title {
+    font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase;
+    letter-spacing: .05em; margin: 24px 0 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title::after {
+    content: ""; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* Columns table */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left; padding: 8px 12px; font-size: 11px; color: var(--text3);
+    font-weight: 500; text-transform: uppercase; letter-spacing: .03em;
+    border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 9px 12px; border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  tbody tr { transition: background .1s; }
+  tbody tr:hover { background: var(--surface); }
+  .col-num { color: var(--text3); font-size: 11px; width: 28px; }
+  .col-name-cell {
+    font-family: var(--mono); font-weight: 600; color: var(--text);
+    white-space: nowrap; cursor: pointer; transition: color .15s;
+  }
+  .col-name-cell:hover { color: var(--accent2); }
+  .col-name-cell .pk-badge {
+    display: inline-block; padding: 1px 5px; background: rgba(210,153,34,0.15);
+    color: var(--yellow); border-radius: 10px; font-size: 9px; font-weight: 700;
+    margin-left: 6px; text-transform: uppercase; letter-spacing: .03em;
+    font-family: var(--font);
+  }
+  .col-name-cell .fk-link {
+    display: inline-block; padding: 1px 5px; background: rgba(163,113,247,0.15);
+    color: var(--purple); border-radius: 10px; font-size: 9px; font-weight: 600;
+    margin-left: 4px; cursor: pointer; font-family: var(--font);
+    transition: background .15s;
+  }
+  .col-name-cell .fk-link:hover { background: rgba(163,113,247,0.3); }
+  .type-badge {
+    display: inline-block; padding: 2px 8px; background: var(--type-bg);
+    color: var(--type-text); border-radius: var(--radius-sm); font-size: 12px;
+    font-family: var(--mono); white-space: nowrap;
+  }
+  .nullable-y { color: var(--text3); }
+  .nullable-n { color: var(--yellow); font-weight: 600; }
+  .default-val { color: var(--text3); font-size: 12px; font-family: var(--mono); }
+  .comment-cell { color: var(--text2); font-size: 12px; max-width: 300px; line-height: 1.5; }
+
+  /* Relations section */
+  .rel-section { display: flex; gap: 24px; flex-wrap: wrap; }
+  .rel-group { flex: 1; min-width: 220px; }
+  .rel-group h4 { font-size: 12px; color: var(--text2); font-weight: 600; margin-bottom: 8px; }
+  .rel-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); font-size: 12px; margin: 0 6px 6px 0;
+    cursor: pointer; transition: all .15s; font-family: var(--mono);
+    color: var(--text2);
+  }
+  .rel-chip:hover { border-color: var(--accent); color: var(--accent2); }
+  .rel-chip .dir { font-size: 10px; color: var(--text3); }
+  .conf-high { border-left: 2px solid var(--green); }
+  .conf-medium { border-left: 2px solid var(--yellow); }
+  .conf-low { border-left: 2px solid var(--text3); }
+
+  /* SQL block */
+  .sql-block {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; font-size: 12px; font-family: var(--mono); color: var(--text2);
+    line-height: 1.7; overflow-x: auto; position: relative; white-space: pre;
+  }
+  .sql-block .copy-sql {
+    position: absolute; top: 8px; right: 8px; padding: 4px 10px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text2); cursor: pointer; font-size: 11px; font-family: var(--font);
+    transition: all .15s; opacity: 0;
+  }
+  .sql-block:hover .copy-sql { opacity: 1; }
+  .sql-block .copy-sql:hover { border-color: var(--accent); color: var(--accent2); }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; padding: 10px 18px;
+    background: var(--surface2); border: 1px solid var(--accent); border-radius: var(--radius-sm);
+    color: var(--accent2); font-size: 13px; font-weight: 500;
+    opacity: 0; transform: translateY(10px); transition: all .2s;
+    pointer-events: none; z-index: 100;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  @media (max-width: 768px) {
+    aside { width: 240px; min-width: 240px; }
+    main { padding: 0; }
+    .main-inner { padding: 16px; }
+    .graph-section { padding: 12px 16px 8px; }
+    .stat-row { gap: 8px; }
+    .stat { padding: 8px 12px; min-width: 60px; }
+    .stat .num { font-size: 18px; }
+    .rel-section { flex-direction: column; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="sb-header">
+    <h2>Database Schema</h2>
+    <div class="sub">10 tables · 8 migrations</div>
+  </div>
+  <div class="search-wrap">
+    <input placeholder="Filter tables or columns…" id="search" autofocus>
+  </div>
+  <div class="table-list" id="table-list"></div>
+  <div class="sb-footer">
+    <span>10 tables</span>
+    <span>18 relationships</span>
+  </div>
+</aside>
+
+<main>
+  <div class="graph-section" id="graph-section">
+    <div class="section-label">🗺 Table Relationships <span style="font-weight:400;color:var(--text3);font-size:10px">(click a node)</span></div>
+    <div class="graph-canvas-wrap" id="graph-wrap"></div>
+  </div>
+  <div class="main-inner" id="main-inner"></div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const DATA = {"tables":[{"name":"posts","columns":[{"name":"id","type":"VARCHAR(24) PRIMARY KEY","nullable":true,"defaultValue":null,"comment":null},{"name":"uuid","type":"VARCHAR(36) NOT NULL UNIQUE","nullable":true,"defaultValue":null,"comment":null},{"name":"title","type":"VARCHAR(2000)","nullable":false,"defaultValue":null,"comment":null},{"name":"slug","type":"VARCHAR(191)","nullable":false,"defaultValue":null,"comment":null},{"name":"mobiledoc","type":"TEXT","nullable":true,"defaultValue":null,"comment":null},{"name":"html","type":"TEXT","nullable":true,"defaultValue":null,"comment":null},{"name":"plaintext","type":"TEXT","nullable":true,"defaultValue":null,"comment":null},{"name":"featured_image","type":"VARCHAR(2000)","nullable":true,"defaultValue":null,"comment":null},{"name":"featured","type":"TINYINT(1)","nullable":false,"defaultValue":"0","comment":null},{"name":"type","type":"VARCHAR(50)","nullable":false,"defaultValue":"post","comment":null},{"name":"status","type":"VARCHAR(50)","nullable":false,"defaultValue":"draft","comment":null},{"name":"locale","type":"VARCHAR(6)","nullable":true,"defaultValue":null,"comment":null},{"name":"visibility","type":"VARCHAR(50)","nullable":false,"defaultValue":"public","comment":null},{"name":"meta_title","type":"VARCHAR(2000)","nullable":true,"defaultValue":null,"comment":null},{"name":"meta_description","type":"VARCHAR(2000)","nullable":true,"defaultValue":null,"comment":null},{"name":"author_id","type":"VARCHAR(24)","nullable":false,"defaultValue":null,"comment":null},{"name":"created_at","type":"DATETIME","nullable":false,"defaultValue":"CURRENT_TIMESTAMP","comment":null},{"name":"updated_at","type":"DATETIME","nullable":true,"defaultValue":null,"comment":null},{"name":"published_at","type":"DATETIME","nullable":true,"defaultValue":null,"comment":null},{"name":"created_by","type":"VARCHAR(24)","nullable":false,"defaultValue":null,"comment":null},{"name":"updated_by","type":"VARCHAR(24)","nullable":true,"defaultValue":null,"comment":null}],"primaryKey":[],"indexes":[],"sql":"CREATE TABLE `posts` (\nid VARCHAR(24) PRIMARY KEY\nuuid VARCHAR(36) NOT NULL UNIQUE\ntitle VARCHAR(2000) NOT NULL\nslug VARCHAR(191) NOT NULL\nmobiledoc TEXT\nhtml TEXT\nplaintext TEXT\nfeatured_image VARCHAR(2000)\nfeatured TINYINT(1) NOT NULL DEFAULT 0\ntype VARCHAR(50) NOT NULL DEFAULT 'post'\nstatus VARCHAR(50) NOT NULL DEFAULT 'draft'\nlocale VARCHAR(6)\nvisibility VARCHAR(50) NOT NULL DEFAULT 'public'\nmeta_title VARCHAR(2000)\nmeta_description VARCHAR(2000)\nauthor_id VARCHAR(24) NOT NULL\ncreated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\nupdated_at DATETIME\npublished_at DATETIME\ncreated_by VARCHAR(24) NOT NULL\nupdated_by VARCHAR(24)\n)"},{"name":"users","columns":[{"name":"id","type":"VARCHAR(24) PRIMARY KEY","nullable":true,"defaultValue":null,"comment":null},{"name":"name","type":"VARCHAR(191)","nullable":false,"defaultValue":null,"comment":null},{"name":"slug","type":"VARCHAR(191) NOT NULL UNIQUE","nullable":true,"defaultValue":null,"comment":null},{"name":"password","type":"VARCHAR(60)","nullable":false,"defaultValue":null,"comment":null},{"name":"email","type":"VARCHAR(191) NOT NULL UNIQUE","nullable":true,"defaultValue":null,"comment":null},{"name":"profile_image","type":"VARCHAR(2000)","nullable":true,"defaultValue":null,"comment":null},{"name":"cover_image","type":"VARCHAR(2000)","nullable":true,"defaultValue":null,"comment":null},{"name":"bio","type":"TEXT","nullable":true,"defaultValue":null,"comment":null},{"name":"website","type":"VARCHAR(2000)","nullable":true,"defaultValue":null,"comment":null},{"name":"location","type":"VARCHAR(65535)","nullable":true,"defaultValue":null,"comment":null},{"name":"accessibility","type":"TEXT","nullable":true,"defaultValue":null,"comment":null},{"name":"status","type":"VARCHAR(50)","nullable":false,"defaultValue":"active","comment":null},{"name":"visibility","type":"VARCHAR(50)","nullable":false,"defaultValue":"public","comment":null},{"name":"meta_title","type":"VARCHAR(2000)","nullable":true,"defaultValue":null,"comment":null},{"name":"meta_description","type":"VARCHAR(2000)","nullable":true,"defaultValue":null,"comment":null},{"name":"tour","type":"TEXT","nullable":true,"defaultValue":null,"comment":null},{"name":"last_seen","type":"DATETIME","nullable":true,"defaultValue":null,"comment":null},{"name":"created_at","type":"DATETIME","nullable":false,"defaultValue":"CURRENT_TIMESTAMP","comment":null},{"name":"updated_at","type":"DATETIME","nullable":true,"defaultValue":null,"comment":null},{"name":"created_by","type":"VARCHAR(24)","nullable":false,"defaultValue":null,"comment":null},{"name":"updated_by","type":"VARCHAR(24)","nullable":true,"defaultValue":null,"comment":null}],"primaryKey":[],"indexes":[],"sql":"CREATE TABLE `users` (\nid VARCHAR(24) PRIMARY KEY\nname VARCHAR(191) NOT NULL\nslug VARCHAR(191) NOT NULL UNIQUE\npassword VARCHAR(60) NOT NULL\nemail VARCHAR(191) NOT NULL UNIQUE\nprofile_image VARCHAR(2000)\ncover_image VARCHAR(2000)\nbio TEXT\nwebsite VARCHAR(2000)\nlocation VARCHAR(65535)\naccessibility TEXT\nstatus VARCHAR(50) NOT NULL DEFAULT 'active'\nvisibility VARCHAR(50) NOT NULL DEFAULT 'public'\nmeta_title VARCHAR(2000)\nmeta_description VARCHAR(2000)\ntour TEXT\nlast_seen DATETIME\ncreated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\nupdated_at DATETIME\ncreated_by VARCHAR(24) NOT NULL\nupdated_by VARCHAR(24)\n)"},{"name":"tags","columns":[{"name":"id","type":"VARCHAR(24) PRIMARY KEY","nullable":true,"defaultValue":null,"comment":null},{"name":"name","type":"VARCHAR(191)","nullable":false,"defaultValue":null,"comment":null},{"name":"slug","type":"VARCHAR(191)","nullable":false,"defaultValue":null,"comment":null},{"name":"description","type":"TEXT","nullable":true,"defaultValue":null,"comment":null},{"name":"feature_image","type":"VARCHAR(2000)","nullable":true,"defaultValue":null,"comment":null},{"name":"meta_title","type":"VARCHAR(2000)","nullable":true,"defaultValue":null,"comment":null},{"name":"meta_description","type":"VARCHAR(2000)","nullable":true,"defaultValue":null,"comment":null},{"name":"visibility","type":"VARCHAR(50)","nullable":false,"defaultValue":"public","comment":null},{"name":"created_at","type":"DATETIME","nullable":false,"defaultValue":"CURRENT_TIMESTAMP","comment":null},{"name":"updated_at","type":"DATETIME","nullable":true,"defaultValue":null,"comment":null},{"name":"created_by","type":"VARCHAR(24)","nullable":false,"defaultValue":null,"comment":null},{"name":"updated_by","type":"VARCHAR(24)","nullable":true,"defaultValue":null,"comment":null}],"primaryKey":[],"indexes":[],"sql":"CREATE TABLE `tags` (\nid VARCHAR(24) PRIMARY KEY\nname VARCHAR(191) NOT NULL\nslug VARCHAR(191) NOT NULL\ndescription TEXT\nfeature_image VARCHAR(2000)\nmeta_title VARCHAR(2000)\nmeta_description VARCHAR(2000)\nvisibility VARCHAR(50) NOT NULL DEFAULT 'public'\ncreated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\nupdated_at DATETIME\ncreated_by VARCHAR(24) NOT NULL\nupdated_by VARCHAR(24)\n)"},{"name":"posts_tags","columns":[{"name":"id","type":"VARCHAR(24) PRIMARY KEY","nullable":true,"defaultValue":null,"comment":null},{"name":"post_id","type":"VARCHAR(24) NOT NULL REFERENCES posts(id) ON DELETE CASCADE","nullable":true,"defaultValue":null,"comment":null},{"name":"tag_id","type":"VARCHAR(24) NOT NULL REFERENCES tags(id) ON DELETE CASCADE","nullable":true,"defaultValue":null,"comment":null},{"name":"sort_order","type":"INT","nullable":false,"defaultValue":"0","comment":null}],"primaryKey":[],"indexes":[],"sql":"CREATE TABLE `posts_tags` (\nid VARCHAR(24) PRIMARY KEY\npost_id VARCHAR(24) NOT NULL REFERENCES posts(id) ON DELETE CASCADE\ntag_id VARCHAR(24) NOT NULL REFERENCES tags(id) ON DELETE CASCADE\nsort_order INT NOT NULL DEFAULT 0\nUNIQUE (post_id, tag_id)\n)"},{"name":"settings","columns":[{"name":"id","type":"VARCHAR(24) PRIMARY KEY","nullable":true,"defaultValue":null,"comment":null},{"name":"key","type":"VARCHAR(50) NOT NULL UNIQUE","nullable":true,"defaultValue":null,"comment":null},{"name":"value","type":"TEXT","nullable":true,"defaultValue":null,"comment":null},{"name":"type","type":"VARCHAR(50)","nullable":false,"defaultValue":"core","comment":null},{"name":"created_at","type":"DATETIME","nullable":false,"defaultValue":"CURRENT_TIMESTAMP","comment":null},{"name":"updated_at","type":"DATETIME","nullable":true,"defaultValue":null,"comment":null},{"name":"created_by","type":"VARCHAR(24)","nullable":false,"defaultValue":null,"comment":null},{"name":"updated_by","type":"VARCHAR(24)","nullable":true,"defaultValue":null,"comment":null}],"primaryKey":[],"indexes":[],"sql":"CREATE TABLE `settings` (\nid VARCHAR(24) PRIMARY KEY\n`key` VARCHAR(50) NOT NULL UNIQUE\n`value` TEXT\n`type` VARCHAR(50) NOT NULL DEFAULT 'core'\ncreated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\nupdated_at DATETIME\ncreated_by VARCHAR(24) NOT NULL\nupdated_by VARCHAR(24)\n)"},{"name":"members","columns":[{"name":"id","type":"VARCHAR(24) PRIMARY KEY","nullable":true,"defaultValue":null,"comment":null},{"name":"uuid","type":"VARCHAR(36) NOT NULL UNIQUE","nullable":true,"defaultValue":null,"comment":null},{"name":"email","type":"VARCHAR(191) NOT NULL UNIQUE","nullable":true,"defaultValue":null,"comment":null},{"name":"name","type":"VARCHAR(191)","nullable":true,"defaultValue":null,"comment":null},{"name":"note","type":"TEXT","nullable":true,"defaultValue":null,"comment":null},{"name":"subscribed","type":"TINYINT(1)","nullable":false,"defaultValue":"1","comment":null},{"name":"geolocation","type":"VARCHAR(2000)","nullable":true,"defaultValue":null,"comment":null},{"name":"expertise","type":"VARCHAR(191)","nullable":true,"defaultValue":null,"comment":null},{"name":"status","type":"VARCHAR(50)","nullable":false,"defaultValue":"free","comment":null},{"name":"email_count","type":"INT","nullable":false,"defaultValue":"0","comment":null},{"name":"email_opened_count","type":"INT","nullable":false,"defaultValue":"0","comment":null},{"name":"email_open_rate","type":"DOUBLE","nullable":true,"defaultValue":"0","comment":null},{"name":"created_at","type":"DATETIME","nullable":false,"defaultValue":"CURRENT_TIMESTAMP","comment":null},{"name":"updated_at","type":"DATETIME","nullable":true,"defaultValue":null,"comment":null},{"name":"created_by","type":"VARCHAR(24)","nullable":false,"defaultValue":null,"comment":null},{"name":"updated_by","type":"VARCHAR(24)","nullable":true,"defaultValue":null,"comment":null}],"primaryKey":[],"indexes":[],"sql":"CREATE TABLE `members` (\nid VARCHAR(24) PRIMARY KEY\nuuid VARCHAR(36) NOT NULL UNIQUE\nemail VARCHAR(191) NOT NULL UNIQUE\nname VARCHAR(191)\nnote TEXT\nsubscribed TINYINT(1) NOT NULL DEFAULT 1\ngeolocation VARCHAR(2000)\nexpertise VARCHAR(191)\nstatus VARCHAR(50) NOT NULL DEFAULT 'free'\nemail_count INT NOT NULL DEFAULT 0\nemail_opened_count INT NOT NULL DEFAULT 0\nemail_open_rate DOUBLE DEFAULT 0\ncreated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\nupdated_at DATETIME\ncreated_by VARCHAR(24) NOT NULL\nupdated_by VARCHAR(24)\n)"},{"name":"stripe_customers","columns":[{"name":"id","type":"VARCHAR(24) PRIMARY KEY","nullable":true,"defaultValue":null,"comment":null},{"name":"customer_id","type":"VARCHAR(255)","nullable":false,"defaultValue":null,"comment":null},{"name":"member_id","type":"VARCHAR(24) NOT NULL REFERENCES members(id) ON DELETE CASCADE","nullable":true,"defaultValue":null,"comment":null},{"name":"name","type":"VARCHAR(191)","nullable":true,"defaultValue":null,"comment":null},{"name":"email","type":"VARCHAR(191)","nullable":false,"defaultValue":null,"comment":null},{"name":"created_at","type":"DATETIME","nullable":false,"defaultValue":"CURRENT_TIMESTAMP","comment":null}],"primaryKey":[],"indexes":[],"sql":"CREATE TABLE `stripe_customers` (\nid VARCHAR(24) PRIMARY KEY\ncustomer_id VARCHAR(255) NOT NULL\nmember_id VARCHAR(24) NOT NULL REFERENCES members(id) ON DELETE CASCADE\nname VARCHAR(191)\nemail VARCHAR(191) NOT NULL\ncreated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\n)"},{"name":"subscriptions","columns":[{"name":"id","type":"VARCHAR(24) PRIMARY KEY","nullable":true,"defaultValue":null,"comment":null},{"name":"customer_id","type":"VARCHAR(255)","nullable":false,"defaultValue":null,"comment":null},{"name":"member_id","type":"VARCHAR(24) NOT NULL REFERENCES members(id) ON DELETE CASCADE","nullable":true,"defaultValue":null,"comment":null},{"name":"stripe_subscription_id","type":"VARCHAR(255)","nullable":true,"defaultValue":null,"comment":null},{"name":"status","type":"VARCHAR(50)","nullable":false,"defaultValue":"trialing","comment":null},{"name":"current_period_end","type":"DATETIME","nullable":true,"defaultValue":null,"comment":null},{"name":"plan_id","type":"VARCHAR(24)","nullable":true,"defaultValue":null,"comment":null},{"name":"plan_nickname","type":"VARCHAR(50)","nullable":true,"defaultValue":null,"comment":null},{"name":"plan_interval","type":"VARCHAR(50)","nullable":true,"defaultValue":null,"comment":null},{"name":"plan_amount","type":"INT","nullable":true,"defaultValue":null,"comment":null},{"name":"plan_currency","type":"VARCHAR(3)","nullable":true,"defaultValue":"usd","comment":null},{"name":"created_at","type":"DATETIME","nullable":false,"defaultValue":"CURRENT_TIMESTAMP","comment":null},{"name":"updated_at","type":"DATETIME","nullable":true,"defaultValue":null,"comment":null}],"primaryKey":[],"indexes":[],"sql":"CREATE TABLE `subscriptions` (\nid VARCHAR(24) PRIMARY KEY\ncustomer_id VARCHAR(255) NOT NULL\nmember_id VARCHAR(24) NOT NULL REFERENCES members(id) ON DELETE CASCADE\nstripe_subscription_id VARCHAR(255)\nstatus VARCHAR(50) NOT NULL DEFAULT 'trialing'\ncurrent_period_end DATETIME\nplan_id VARCHAR(24)\nplan_nickname VARCHAR(50)\nplan_interval VARCHAR(50)\nplan_amount INT\nplan_currency VARCHAR(3) DEFAULT 'usd'\ncreated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\nupdated_at DATETIME\n)"},{"name":"emails","columns":[{"name":"id","type":"VARCHAR(24) PRIMARY KEY","nullable":true,"defaultValue":null,"comment":null},{"name":"post_id","type":"VARCHAR(24) NOT NULL REFERENCES posts(id) ON DELETE CASCADE","nullable":true,"defaultValue":null,"comment":null},{"name":"uuid","type":"VARCHAR(36) NOT NULL UNIQUE","nullable":true,"defaultValue":null,"comment":null},{"name":"status","type":"VARCHAR(50)","nullable":false,"defaultValue":"pending","comment":null},{"name":"recipient_filter","type":"VARCHAR(50)","nullable":false,"defaultValue":"all","comment":null},{"name":"subject","type":"VARCHAR(300)","nullable":false,"defaultValue":null,"comment":null},{"name":"html","type":"TEXT","nullable":true,"defaultValue":null,"comment":null},{"name":"plaintext","type":"TEXT","nullable":true,"defaultValue":null,"comment":null},{"name":"stats","type":"TEXT","nullable":true,"defaultValue":null,"comment":null},{"name":"email_count","type":"INT","nullable":false,"defaultValue":"0","comment":null},{"name":"delivered_count","type":"INT","nullable":false,"defaultValue":"0","comment":null},{"name":"opened_count","type":"INT","nullable":false,"defaultValue":"0","comment":null},{"name":"failed_count","type":"INT","nullable":false,"defaultValue":"0","comment":null},{"name":"source","type":"VARCHAR(50)","nullable":true,"defaultValue":"html","comment":null},{"name":"source_type","type":"VARCHAR(50)","nullable":true,"defaultValue":"mobiledoc","comment":null},{"name":"submitted_at","type":"DATETIME","nullable":true,"defaultValue":null,"comment":null},{"name":"created_at","type":"DATETIME","nullable":false,"defaultValue":"CURRENT_TIMESTAMP","comment":null}],"primaryKey":[],"indexes":[],"sql":"CREATE TABLE `emails` (\nid VARCHAR(24) PRIMARY KEY\npost_id VARCHAR(24) NOT NULL REFERENCES posts(id) ON DELETE CASCADE\nuuid VARCHAR(36) NOT NULL UNIQUE\nstatus VARCHAR(50) NOT NULL DEFAULT 'pending'\nrecipient_filter VARCHAR(50) NOT NULL DEFAULT 'all'\nsubject VARCHAR(300) NOT NULL\nhtml TEXT\nplaintext TEXT\nstats TEXT\nemail_count INT NOT NULL DEFAULT 0\ndelivered_count INT NOT NULL DEFAULT 0\nopened_count INT NOT NULL DEFAULT 0\nfailed_count INT NOT NULL DEFAULT 0\nsource VARCHAR(50) DEFAULT 'html'\nsource_type VARCHAR(50) DEFAULT 'mobiledoc'\nsubmitted_at DATETIME\ncreated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\n)"},{"name":"email_batches","columns":[{"name":"id","type":"VARCHAR(24) PRIMARY KEY","nullable":true,"defaultValue":null,"comment":null},{"name":"email_id","type":"VARCHAR(24) NOT NULL REFERENCES emails(id) ON DELETE CASCADE","nullable":true,"defaultValue":null,"comment":null},{"name":"provider_id","type":"VARCHAR(255)","nullable":true,"defaultValue":null,"comment":null},{"name":"status","type":"VARCHAR(50)","nullable":false,"defaultValue":"pending","comment":null},{"name":"member_segment","type":"TEXT","nullable":true,"defaultValue":null,"comment":null}],"primaryKey":[],"indexes":[],"sql":"CREATE TABLE `email_batches` (\nid VARCHAR(24) PRIMARY KEY\nemail_id VARCHAR(24) NOT NULL REFERENCES emails(id) ON DELETE CASCADE\nprovider_id VARCHAR(255)\nstatus VARCHAR(50) NOT NULL DEFAULT 'pending'\nmember_segment TEXT\n)"}],"relations":[{"from":{"table":"posts","column":"created_by"},"to":{"table":"users","column":"id"},"confidence":"medium"},{"from":{"table":"posts","column":"updated_by"},"to":{"table":"users","column":"id"},"confidence":"medium"},{"from":{"table":"users","column":"created_by"},"to":{"table":"users","column":"id"},"confidence":"medium"},{"from":{"table":"users","column":"updated_by"},"to":{"table":"users","column":"id"},"confidence":"medium"},{"from":{"table":"tags","column":"created_by"},"to":{"table":"users","column":"id"},"confidence":"medium"},{"from":{"table":"tags","column":"updated_by"},"to":{"table":"users","column":"id"},"confidence":"medium"},{"from":{"table":"posts_tags","column":"post_id"},"to":{"table":"posts","column":"id"},"confidence":"medium"},{"from":{"table":"posts_tags","column":"tag_id"},"to":{"table":"tags","column":"id"},"confidence":"medium"},{"from":{"table":"settings","column":"created_by"},"to":{"table":"users","column":"id"},"confidence":"medium"},{"from":{"table":"settings","column":"updated_by"},"to":{"table":"users","column":"id"},"confidence":"medium"},{"from":{"table":"members","column":"created_by"},"to":{"table":"users","column":"id"},"confidence":"medium"},{"from":{"table":"members","column":"updated_by"},"to":{"table":"users","column":"id"},"confidence":"medium"},{"from":{"table":"stripe_customers","column":"customer_id"},"to":{"table":"stripe_customers","column":"id"},"confidence":"medium"},{"from":{"table":"stripe_customers","column":"member_id"},"to":{"table":"members","column":"id"},"confidence":"medium"},{"from":{"table":"subscriptions","column":"customer_id"},"to":{"table":"stripe_customers","column":"id"},"confidence":"medium"},{"from":{"table":"subscriptions","column":"member_id"},"to":{"table":"members","column":"id"},"confidence":"medium"},{"from":{"table":"emails","column":"post_id"},"to":{"table":"posts","column":"id"},"confidence":"medium"},{"from":{"table":"email_batches","column":"email_id"},"to":{"table":"emails","column":"id"},"confidence":"medium"}],"title":"Database Schema","subtitle":"10 tables · 8 migrations"};
+
+const state = { activeTable: null, graphNodes: [], graphEdges: [] };
+
+// ====== RENDER ======
+function render() {
+  renderSidebar();
+  renderGraph();
+  renderDetail();
+}
+
+function renderSidebar() {
+  const q = (document.getElementById("search").value || "").toLowerCase();
+  const filtered = q
+    ? DATA.tables.filter(t =>
+        t.name.toLowerCase().includes(q) ||
+        t.columns.some(c => c.name.toLowerCase().includes(q))
+      )
+    : DATA.tables;
+
+  const rels = new Map();
+  DATA.relations.forEach(r => {
+    rels.set(r.from.table, (rels.get(r.from.table) || 0) + 1);
+    rels.set(r.to.table, (rels.get(r.to.table) || 0) + 1);
+  });
+
+  document.getElementById("table-list").innerHTML = filtered.map(t => {
+    const rel = rels.get(t.name) || 0;
+    const active = state.activeTable && state.activeTable.name === t.name;
+    return `<div class="table-item${active ? ' active' : ''}${rel > 0 ? ' has-rels' : ''}"
+      onclick="selectTable('${escAttr(t.name)}')">
+      <span class="icon">${active ? '📌' : '📦'}</span>
+      <span class="name">${escHtml(t.name)}</span>
+      <span class="rel-dot" title="${rel} relationship(s)"></span>
+      <span class="badge">${t.columns.length}</span>
+    </div>`;
+  }).join("");
+}
+
+// ====== GRAPH ======
+function renderGraph() {
+  const wrap = document.getElementById("graph-wrap");
+  if (DATA.tables.length === 0) { wrap.innerHTML = ""; return; }
+
+  // Simple grid layout
+  const cols = Math.min(6, Math.ceil(Math.sqrt(DATA.tables.length * 2)));
+  const rows = Math.ceil(DATA.tables.length / cols);
+  const cellW = 160;
+  const cellH = 48;
+  const padX = 40;
+  const padY = 30;
+  const gapX = 24;
+  const gapY = 20;
+  const totalW = cols * cellW + (cols - 1) * gapX + padX * 2;
+  const totalH = rows * cellH + (rows - 1) * gapY + padY * 2;
+
+  const nodes = DATA.tables.map((t, i) => ({
+    table: t.name,
+    col: i % cols,
+    row: Math.floor(i / cols),
+    x: padX + (i % cols) * (cellW + gapX),
+    y: padY + Math.floor(i / cols) * (cellH + gapY),
+    w: cellW,
+    h: cellH,
+  }));
+
+  const nodeMap = new Map(nodes.map(n => [n.table, n]));
+  const edges = DATA.relations
+    .filter(r => nodeMap.has(r.from.table) && nodeMap.has(r.to.table))
+    .map(r => ({
+      from: nodeMap.get(r.from.table),
+      to: nodeMap.get(r.to.table),
+      confidence: r.confidence,
+      fromCol: r.from.column,
+      toCol: r.to.column,
+    }));
+
+  state.graphNodes = nodes;
+  state.graphEdges = edges;
+
+  const activeName = state.activeTable ? state.activeTable.name : null;
+
+  // Edge paths
+  const edgePaths = edges.map(e => {
+    const x1 = e.from.x + e.from.w / 2;
+    const y1 = e.from.y + e.from.h;
+    const x2 = e.to.x + e.to.w / 2;
+    const y2 = e.to.y;
+    const mx = (x1 + x2) / 2;
+    const my = (y1 + y2) / 2;
+    const curve = Math.min(Math.abs(y2 - y1) * 0.4, 40);
+    const d = `M${x1},${y1} C${x1},${y1 + curve} ${x2},${y2 - curve} ${x2},${y2}`;
+    const highlight = activeName && (e.from.table === activeName || e.to.table === activeName);
+    return `<path class="edge${highlight ? ' highlight' : ''}" d="${d}" marker-end="url(#arrow)" />`;
+  }).join("");
+
+  // Node rects
+  const nodeRects = nodes.map(n => {
+    const active = n.table === activeName;
+    const related = activeName && state.graphEdges.some(
+      e => (e.from.table === activeName && e.to.table === n.table) ||
+           (e.to.table === activeName && e.from.table === n.table)
+    );
+    return `<rect class="node-rect${active ? ' active' : (related ? ' highlight' : '')}"
+      x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="4"
+      onclick="selectTable('${escAttr(n.table)}')" style="cursor:pointer" />
+    <text class="node-text${active ? ' active' : ''}"
+      x="${n.x + n.w / 2}" y="${n.y + n.h / 2}" text-anchor="middle"
+      dominant-baseline="central"
+      onclick="selectTable('${escAttr(n.table)}')" style="cursor:pointer;font-size:11px">${escHtml(n.table)}</text>`;
+  }).join("");
+
+  const renderRels = edges.length > 0;
+  wrap.innerHTML = renderRels
+    ? `<svg id="rel-graph" viewBox="0 0 ${totalW} ${totalH}" style="min-height:${totalH}px">
+      <defs><marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+        <path d="M0,0 L6,3 L0,6 Z" class="edge-marker" />
+      </marker></defs>
+      ${edgePaths}
+      ${nodeRects}
+    </svg>`
+    : `<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">No relationships detected</div>`;
+}
+
+// ====== DETAIL ======
+function renderDetail() {
+  const main = document.getElementById("main-inner");
+  const t = state.activeTable;
+
+  if (!t) {
+    main.innerHTML = `<div class="empty-state">
+      <div class="icon-lg">🗄️</div>
+      <h3>Explore your schema</h3>
+      <p>Click a table in the sidebar or graph to see columns, types, defaults, and relationships</p>
+    </div>`;
+    return;
+  }
+
+  const pkCols = t.primaryKey || [];
+  const hasDesc = t.columns.some(c => c.comment);
+
+  // Build FK lookup
+  const fkMap = new Map();
+  DATA.relations.forEach(r => {
+    if (r.from.table === t.name) fkMap.set(r.from.column, r);
+    if (r.to.table === t.name && !fkMap.has(r.to.column)) {
+      // reversed — other tables referencing us
+    }
+  });
+  const refsFrom = DATA.relations.filter(r => r.from.table === t.name);
+  const refsTo = DATA.relations.filter(r => r.to.table === t.name);
+
+  const ddl = t.sql || `CREATE TABLE ${t.name} (
+${t.columns.map(c =>
+    `  ${c.name} ${c.type}${c.nullable ? '' : ' NOT NULL'}${c.defaultValue !== null && c.defaultValue !== undefined ? ' DEFAULT ' + c.defaultValue : ''}`
+  ).join(',\n')}
+);`;
+
+  main.innerHTML = `
+    <div class="detail-header">
+      <h1>
+        ${escHtml(t.name)}
+        <button class="copy-btn" onclick="copyText('${escAttr(t.name)}')">Copy name</button>
+      </h1>
+      <div class="header-meta">
+        <span>${t.columns.length} columns</span>
+        ${pkCols.length ? `<span>PK: ${pkCols.map(c => `<code>${escHtml(c)}</code>`).join(", ")}</span>` : ""}
+        ${t.indexes?.length ? `<span>${t.indexes.length} indexes</span>` : ""}
+      </div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat">
+        <div class="num">${t.columns.length}</div>
+        <div class="label">Columns</div>
+      </div>
+      ${pkCols.length ? `<div class="stat">
+        <div class="num">${pkCols.length}</div>
+        <div class="label">Primary Keys</div>
+      </div>` : ""}
+      ${t.indexes?.length ? `<div class="stat accent">
+        <div class="num">${t.indexes.length}</div>
+        <div class="label">Indexes</div>
+      </div>` : ""}
+      <div class="stat">
+        <div class="num">${t.columns.filter(c => !c.nullable).length}</div>
+        <div class="label">NOT NULL</div>
+      </div>
+      <div class="stat">
+        <div class="num">${refsFrom.length + refsTo.length}</div>
+        <div class="label">Relations</div>
+      </div>
+    </div>
+
+    ${refsFrom.length + refsTo.length > 0 ? `
+      <div class="section-title">Relationships</div>
+      <div class="rel-section">
+        ${refsFrom.length ? `<div class="rel-group">
+          <h4>→ References (FK out)</h4>
+          ${refsFrom.map(r => `<span class="rel-chip conf-${r.confidence}"
+            onclick="selectTable('${escAttr(r.to.table)}')">
+            ${escHtml(r.from.column)} <span class="dir">→</span> ${escHtml(r.to.table)}.${escHtml(r.to.column)}
+          </span>`).join("")}
+        </div>` : ""}
+        ${refsTo.length ? `<div class="rel-group">
+          <h4>← Referenced by</h4>
+          ${refsTo.map(r => `<span class="rel-chip conf-${r.confidence}"
+            onclick="selectTable('${escAttr(r.from.table)}')">
+            ${escHtml(r.from.table)}.${escHtml(r.from.column)} <span class="dir">→</span> ${escHtml(r.to.column)}
+          </span>`).join("")}
+        </div>` : ""}
+      </div>
+    ` : ""}
+
+    <div class="section-title">Columns</div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Column</th><th>Type</th><th>Nullable</th><th>Default</th>
+        ${hasDesc ? "<th>Description</th>" : ""}
+      </tr></thead>
+      <tbody>
+        ${t.columns.map((c, i) => {
+          const fk = fkMap.get(c.name);
+          const isPk = pkCols.includes(c.name);
+          return `<tr>
+            <td class="col-num">${i + 1}</td>
+            <td>
+              <span class="col-name-cell"
+                ${fk ? `onclick="selectTable('${escAttr(fk.to.table)}')"` : ""}
+                title="${fk ? 'FK → ' + fk.to.table + '.' + fk.to.column : (isPk ? 'Primary Key' : '')}">
+                ${escHtml(c.name)}
+                ${isPk ? '<span class="pk-badge">PK</span>' : ""}
+                ${fk ? `<span class="fk-link" onclick="event.stopPropagation();selectTable('${escAttr(fk.to.table)}')">→ ${escHtml(fk.to.table)}</span>` : ""}
+              </span>
+            </td>
+            <td><span class="type-badge">${escHtml(c.type)}</span></td>
+            <td><span class="${c.nullable ? 'nullable-y' : 'nullable-n'}">${c.nullable ? 'YES' : 'NO'}</span></td>
+            <td class="default-val">${c.defaultValue !== null && c.defaultValue !== undefined ? escHtml(String(c.defaultValue)) : '—'}</td>
+            ${hasDesc ? `<td class="comment-cell">${c.comment ? escHtml(c.comment) : '—'}</td>` : ""}
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+
+    ${t.indexes?.length ? `
+      <div class="section-title">Indexes</div>
+      <div class="rel-section">
+        ${t.indexes.map(i => `<span class="rel-chip" style="cursor:default">${escHtml(i)}</span>`).join("")}
+      </div>
+    ` : ""}
+
+    <div class="section-title">DDL</div>
+    <div class="sql-block">
+      <button class="copy-sql" onclick="copyText(`${escAttr(ddl)}`)">Copy DDL</button>
+      ${escHtml(ddl)}
+    </div>
+  `;
+}
+
+function selectTable(name) {
+  state.activeTable = DATA.tables.find(t => t.name === name) || null;
+  document.getElementById("search").value = "";
+  render();
+  document.getElementById("main-inner").scrollIntoView({ behavior: "smooth" });
+}
+
+// ====== COPY ======
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Copied!");
+  } catch {
+    // Fallback
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    toast("Copied!");
+  }
+}
+
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove("show"), 1800);
+}
+
+// ====== HELPERS ======
+function escHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function escAttr(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/\\/g, "\\\\");
+}
+
+// ====== INIT ======
+document.getElementById("search").addEventListener("input", render);
+render();
+</script>
+</body>
+</html>

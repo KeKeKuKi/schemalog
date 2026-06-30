@@ -1,6 +1,6 @@
 {
   "name": "schemalog",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Your database docs stop lying. AI-powered changelog and data dictionary from SQL migrations.",
   "bin": {
     "schemalog": "dist/cli.js"

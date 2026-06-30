@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name("schemalog")
   .description("AI-powered database schema changelog generator")
-  .version("1.1.0");
+  .version("1.2.0");
 
 /**
  * schemalog init — create a .schemalog.json config file
@@ -332,6 +332,71 @@ program
 
     console.log(`\nDone. → ${outPath}`);
     console.log(`Described ${result.tables.length} table(s).`);
+  });
+
+/**
+ * schemalog view — open an interactive schema visualization in the browser
+ */
+program
+  .command("view")
+  .description("Open interactive schema visualization in browser")
+  .option("-d, --dir <path>", "Migrations directory (default: from .schemalog.json)")
+  .option("-o, --output <path>", "Output file path", "SCHEMA_VIEW.html")
+  .option("--no-open", "Generate HTML without opening browser")
+  .action(async (options) => {
+    const configPath = path.resolve(process.cwd(), CONFIG_FILE);
+    let config: SchemalogConfig;
+
+    if (fs.existsSync(configPath)) {
+      config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    } else {
+      config = { migrationsDir: "migrations", outputDir: "." };
+    }
+
+    const migrationsDir = path.resolve(process.cwd(), options.dir || config.migrationsDir);
+    const { scanMigrations } = await import("./scanner");
+    const { parseTables } = await import("./parser");
+    const { generateSchemaView } = await import("./output/view");
+
+    console.log(`Scanning ${config.migrationsDir}/ ...`);
+    const files = scanMigrations(migrationsDir);
+
+    if (files.length === 0) {
+      console.log("No .sql migration files found.");
+      process.exit(0);
+    }
+
+    // Collect latest version of each table
+    const tableMap = new Map<string, ReturnType<typeof parseTables>[0]>();
+    for (const f of files) {
+      for (const t of parseTables(f.sql)) {
+        tableMap.set(t.name, t);
+      }
+    }
+
+    const tables = Array.from(tableMap.values());
+    console.log(`Found ${tables.length} table(s) across ${files.length} migration(s).`);
+
+    const html = generateSchemaView(tables, "Database Schema", `${tables.length} tables · ${files.length} migrations`);
+    const outPath = path.resolve(process.cwd(), options.output);
+    fs.writeFileSync(outPath, html, "utf-8");
+
+    console.log(`→ ${outPath}`);
+
+    if (options.open) {
+      const { execSync } = await import("child_process");
+      const cmd = process.platform === "darwin"
+        ? `open "${outPath}"`
+        : process.platform === "win32"
+        ? `start "" "${outPath}"`
+        : `xdg-open "${outPath}"`;
+      try {
+        execSync(cmd);
+        console.log("Opened in browser.");
+      } catch {
+        console.log("Open manually:", outPath);
+      }
+    }
   });
 
 program.parse();
