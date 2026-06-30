@@ -17,7 +17,7 @@ const program = new Command();
 program
   .name("schemalog")
   .description("AI-powered database schema changelog generator")
-  .version("0.1.0");
+  .version("1.1.0");
 
 /**
  * schemalog init — create a .schemalog.json config file
@@ -150,6 +150,112 @@ program
     const skipNote = !options.force && cached.length > 0 ? ` (${fresh.length} new, ${cached.length} cached)` : "";
     console.log(`\nDone. → ${outPath}${skipNote}`);
     console.log(`Total: ${entries.length} migrations in changelog.`);
+  });
+
+/**
+ * schemalog diff — compare current schema against a base reference
+ */
+program
+  .command("diff")
+  .description("Compare current migration schema against a base reference")
+  .option("-b, --base <path>", "Path to base migrations directory or .sql file")
+  .option("-r, --base-ref <ref>", "Git ref (branch/tag/commit) to compare against")
+  .option("-d, --dir <path>", "Migrations directory to diff (default: from .schemalog.json)")
+  .option("--json", "Output as JSON")
+  .action(async (options) => {
+    const configPath = path.resolve(process.cwd(), CONFIG_FILE);
+    let config: SchemalogConfig;
+
+    if (fs.existsSync(configPath)) {
+      config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    } else {
+      config = { migrationsDir: "migrations", outputDir: "." };
+    }
+
+    const migrationsDir = path.resolve(process.cwd(), options.dir || config.migrationsDir);
+
+    if (!options.base && !options.baseRef) {
+      console.error("Error: --base <path> or --base-ref <ref> is required.");
+      console.error("  schemalog diff --base-ref main");
+      console.error("  schemalog diff --base path/to/migrations");
+      console.error("  schemalog diff --base path/to/dump.sql");
+      process.exit(1);
+    }
+
+    if (options.base && options.baseRef) {
+      console.error("Error: --base and --base-ref are mutually exclusive.");
+      process.exit(1);
+    }
+
+    const { scanMigrations } = await import("./scanner");
+    const { parseTables } = await import("./parser");
+    const { diffSchemas } = await import("./diff");
+    const { formatDiffMarkdown } = await import("./output/diff");
+
+    // Parse current
+    console.log(`Current: ${config.migrationsDir}/ (${migrationsDir})`);
+    const currentFiles = scanMigrations(migrationsDir);
+    const currentTables = new Map<string, ReturnType<typeof parseTables>[0]>();
+    for (const f of currentFiles) {
+      for (const t of parseTables(f.sql)) {
+        currentTables.set(t.name, t);
+      }
+    }
+
+    // Parse base
+    let baseFiles: ReturnType<typeof scanMigrations>;
+    let baseLabel: string;
+
+    if (options.baseRef) {
+      const { readMigrationsFromGit, isGitAvailable } = await import("./git");
+      if (!isGitAvailable()) {
+        console.error("Error: git not found in PATH. --base-ref requires git.");
+        process.exit(1);
+      }
+      baseLabel = options.baseRef;
+      console.log(`Base:    ${options.baseRef} (git ref, ${config.migrationsDir}/)`);
+      try {
+        baseFiles = readMigrationsFromGit(options.baseRef, config.migrationsDir);
+        console.log(`Found ${baseFiles.length} migration(s) at ref.`);
+      } catch (e: any) {
+        console.error(`Error reading from git: ${e.message}`);
+        process.exit(1);
+      }
+    } else {
+      const basePath = path.resolve(process.cwd(), options.base);
+      baseLabel = options.base;
+      const baseStat = fs.statSync(basePath);
+      if (baseStat.isDirectory()) {
+        console.log(`Base:    ${options.base}/ (${basePath})`);
+        baseFiles = scanMigrations(basePath);
+      } else {
+        console.log(`Base:    ${options.base} (${basePath})`);
+        const sql = fs.readFileSync(basePath, "utf-8");
+        baseFiles = [{ path: basePath, timestamp: "", description: "Base reference", sql }];
+      }
+    }
+
+    const baseTables = new Map<string, ReturnType<typeof parseTables>[0]>();
+    for (const f of baseFiles) {
+      for (const t of parseTables(f.sql)) {
+        baseTables.set(t.name, t);
+      }
+    }
+
+    const diffs = diffSchemas(
+      Array.from(currentTables.values()),
+      Array.from(baseTables.values())
+    );
+
+    if (options.json) {
+      console.log(JSON.stringify(diffs, null, 2));
+    } else {
+      const md = formatDiffMarkdown(diffs, "current", baseLabel);
+      const outPath = path.resolve(process.cwd(), config.outputDir, "SCHEMA_DIFF.md");
+      fs.writeFileSync(outPath, md, "utf-8");
+      console.log(md);
+      console.log(`\nDiff saved to ${outPath}`);
+    }
   });
 
 /**
